@@ -1,12 +1,30 @@
 #ifndef SIMPLE_LOCK_H
 #define SIMPLE_LOCK_H
 
-#define atom_cas __sync_bool_compare_and_swap
+#ifdef _MSC_VER
+
+#include <windows.h>
+#define inline __inline
+
+#define atom_cas_long(ptr, oval, nval) (InterlockedCompareExchange((LONG volatile *)ptr, nval, oval) == oval)
+#define atom_cas_pointer(ptr, oval, nval) (InterlockedCompareExchangePointer((PVOID volatile *)ptr, nval, oval) == oval)
+#define atom_inc(ptr) InterlockedIncrement((LONG volatile *)ptr)
+#define atom_dec(ptr) InterlockedDecrement((LONG volatile *)ptr)
+#define atom_sync() MemoryBarrier()
+#define atom_spinlock(ptr) while (InterlockedExchange((LONG volatile *)ptr , 1)) {}
+#define atom_spinunlock(ptr) InterlockedExchange((LONG volatile *)ptr, 0)
+
+#else
+
+#define atom_cas_long(ptr, oval, nval) __sync_bool_compare_and_swap(ptr, oval, nval)
+#define atom_cas_pointer(ptr, oval, nval) __sync_bool_compare_and_swap(ptr, oval, nval)
 #define atom_inc(ptr) __sync_add_and_fetch(ptr, 1)
 #define atom_dec(ptr) __sync_sub_and_fetch(ptr, 1)
-#define atom_sync __sync_synchronize
+#define atom_sync() __sync_synchronize()
 #define atom_spinlock(ptr) while (__sync_lock_test_and_set(ptr,1)) {}
 #define atom_spinunlock(ptr) __sync_lock_release(ptr)
+
+#endif
 
 /* spin lock */
 #define spin_lock(Q) atom_spinlock(&(Q)->lock)
