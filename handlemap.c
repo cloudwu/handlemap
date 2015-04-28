@@ -191,3 +191,20 @@ handlemap_release(struct handlemap *m, handleid id) {
 		return NULL;
 	}
 }
+
+int
+handlemap_list(struct handlemap *m, int n, handleid * result) {
+	int i,t=0;
+	rwlock_rlock(&m->lock);
+	for (i=0;t < n && i<m->cap;i++) {
+		struct handleslot *slot = &m->slot[i];
+		if (slot->id == 0)
+			continue;
+		result[t] = slot->id;
+		++t;
+	}
+
+	t=m->n;
+	rwlock_runlock(&m->lock);
+	return t;
+}

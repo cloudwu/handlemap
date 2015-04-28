@@ -12,12 +12,11 @@ Or VC:
 #include <stdlib.h>
 
 #include "handlemap.h"
+#include "simplethread.h"
 
 #ifdef _MSC_VER
 
 #include <windows.h>
-
-#define THREAD_FUNC DWORD WINAPI
 
 static void
 usleep(int dummy) {
@@ -29,10 +28,7 @@ usleep(int dummy) {
 #include <pthread.h>
 #include <unistd.h>
 
-#define THREAD_FUNC void *
-
 #endif
-
 
 #define HANDLE_N 1000
 
@@ -56,19 +52,17 @@ grab(struct handlemap *m, int thread) {
 	}
 }
 
-static THREAD_FUNC
+static void
 grab1(void *p) {
 	grab(p, 1);
-	return 0;
 }
 
-static THREAD_FUNC
+static void
 grab2(void *p) {
 	grab(p, 2);
-	return 0;
 }
 
-static THREAD_FUNC
+static void
 create(void *p) {
 	struct handlemap *m = p;
 	int i;
@@ -85,58 +79,34 @@ create(void *p) {
 			printf("release %d failed, id= %u\n", r,id);
 		}
 	}
-	for (i=0;i<HANDLE_N;i++) {
-		handleid id = pool[i];
+}
+
+static void
+test(struct handlemap *m) {
+	struct thread t[3] = {
+		{ create, m },
+		{ grab1, m },
+		{ grab2, m },
+	};
+
+	thread_join(t,3);
+}
+
+int
+main() {
+	struct handlemap * m = handlemap_init();
+	int i;
+	test(m);
+	handleid tmp[HANDLE_N];
+	int n = handlemap_list(m, HANDLE_N, tmp);
+	for (i=0;i<n;i++) {
+		handleid id = tmp[i];
 		void *ptr = handlemap_release(m, id);
 		if (ptr) {
 			printf("clear %d, id = %u, ptr = %p\n", i, id, ptr);
 		}
 	}
-	return 0;
-}
 
-#ifdef _MSC_VER
-
-static void
-test(struct handlemap *m) {
-	int i;
-	HANDLE  hThreadArray[3];
-	hThreadArray[0] = CreateThread(NULL, 0, create, m, 0, NULL);
-	hThreadArray[1] = CreateThread(NULL, 0, grab1, m, 0, NULL);
-	hThreadArray[2] = CreateThread(NULL, 0, grab2, m, 0, NULL);
-
-	WaitForMultipleObjects(3, hThreadArray, TRUE, INFINITE);
-}
-
-#else
-
-static void
-create_thread(pthread_t *thread, void *(*start_routine) (void *), void *arg) {
-	if (pthread_create(thread,NULL, start_routine, arg)) {
-		fprintf(stderr, "Create thread failed");
-		exit(1);
-	}
-}
-
-static void
-test(struct handlemap *m) {
-	int i;
-	pthread_t pid[3];
-	create_thread(&pid[0], create, m);
-	create_thread(&pid[1], grab1, m);
-	create_thread(&pid[2], grab2, m);
-
-	for (i=0;i<3;i++) {
-		pthread_join(pid[i], NULL); 
-	}
-}
-
-#endif
-
-int
-main() {
-	struct handlemap * m = handlemap_init();
-	test(m);
 	handlemap_exit(m);
 
 	return 0;
